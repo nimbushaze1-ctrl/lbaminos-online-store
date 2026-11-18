@@ -79,6 +79,7 @@
       buy.dataset.sku = b.dataset.variant;
       buy.querySelector("input[name=sku]").value = b.dataset.variant;
       const lbl = $("[data-size-label]"); if (lbl) lbl.textContent = b.dataset.size;
+      const im = $("[data-pdp-img]"); if (im && b.dataset.img) { im.src = b.dataset.img; }
       $$("[data-needs-stock]", buy).forEach((x) => (x.disabled = b.dataset.stock !== "1"));
       update();
     }));

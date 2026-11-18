@@ -325,3 +325,27 @@ legend{font-weight:600;font-size:.86rem;margin-bottom:.5rem}
 @media (max-width:640px){.tiers-pick:has(> :nth-child(5)){grid-template-columns:repeat(3,1fr)}}
 .bx-bundle{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:#DCFCE7;color:#14532D;border-radius:12px;padding:.7rem .9rem;margin:-.4rem 0 1rem;font-size:.88rem}
 .bx-bundle div{display:grid}.bx-bundle div:last-child{text-align:right}.bx-bundle span,.bx-bundle s{font-size:.75rem;opacity:.8}
+
+/* product photography (rendered vials, 2:3) */
+.card-img{padding:0;background:var(--stone,#E9E7E3);overflow:hidden}
+.card-img img{width:100%;height:auto;aspect-ratio:2/3;object-fit:cover;transition:transform .35s ease}
+.card:hover .card-img img{transform:scale(1.035)}
+.pdp-img{padding:0;overflow:hidden;align-self:start;position:sticky;top:5.5rem}
+.pdp-img img{width:100%;max-height:none;height:auto;aspect-ratio:2/3;object-fit:cover}
+.bx-img{padding:0;overflow:hidden}
+.bx-img img{width:100%;height:auto;aspect-ratio:4/5;object-fit:cover;object-position:center 70%}
+.hero-grid{grid-template-columns:1fr;gap:1.5rem;text-align:center}
+.hero .lede{margin-inline:auto}
+.hero .ctas{justify-content:center}
+.hero-art img{width:100%;height:auto;box-shadow:var(--shadow)}
+.hero-art .coa-card{text-align:left;margin:-4rem 1.5rem 0 auto}
+@media (max-width:860px){.pdp-img{position:static}.hero-art .coa-card{margin:-1.5rem 12px 0 auto}}
+@media (max-width:640px){
+  .grid,.bx-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
+  .card-body{padding:.75rem .75rem .9rem}
+  .card h3{font-size:.98rem}
+  .card-actions{flex-direction:column}
+  .card-actions .btn{width:100%;justify-content:center}
+  .hero-art img{height:300px;object-fit:cover;object-position:center}
+  .hero-art .coa-card{margin:1rem auto 0;max-width:none}
+}
