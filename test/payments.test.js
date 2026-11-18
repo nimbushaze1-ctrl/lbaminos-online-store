@@ -74,8 +74,8 @@ test("checkout prices server-side and ignores client totals", async () => {
   assert.equal(r.status, 200, JSON.stringify(d));
   assert.match(d.url, /^https:\/\/peptide-pay\.com\/session\/cs_/);
   const init = calls.filter((c) => c.url === "/api/v1/checkout/init").at(-1);
-  // SS-31 $90 x3 at 5% off = 3 x 8550 = 25650; KPV $39.99 = 3999; pickup free
-  assert.equal(init.body.amount_cents, 25650 + 3999);
+  // SS-31 $90 x3 with BOGO 50% (beats 5% bulk) = 9000+9000+4500 = 22500; KPV $39.99 = 3999; pickup free
+  assert.equal(init.body.amount_cents, 22500 + 3999);
   assert.equal(init.body.currency, "USD");
   assert.equal(init.body.wallet, process.env.PEPTIDEPAY_WALLET, "wallet-only mode sends wallet");
   assert.equal(init.headers.authorization, undefined, "no Authorization header in wallet-only mode");
@@ -201,4 +201,20 @@ test("Lab Box: 4 picks at 40% off, free delivery, renewal after payment", async 
   const renewal = orders.createBoxRenewal(boxId);
   assert.equal(renewal.total_cents, expected);
   assert.equal(orders.createBoxRenewal(boxId).id, renewal.id, "only one open invoice at a time");
+});
+
+test("BOGO 50%: second unit half off, picks the cheaper of BOGO vs bulk", () => {
+  const { linePrice, bySku } = require("../lib/catalog");
+  const kpv = bySku.get("KPV-10").variant;
+  assert.equal(linePrice(kpv, 1).totalCents, 3999);
+  assert.equal(linePrice(kpv, 2).totalCents, 3999 + 2000);
+  assert.equal(linePrice(kpv, 3).totalCents, 3999 * 2 + 2000);
+  assert.equal(linePrice(kpv, 2).label, "BOGO 50%");
+});
+
+test("Lab Box includes free bacteriostatic water line", async () => {
+  const { priceBox } = require("../lib/orders");
+  const q = priceBox(["KPV-10", "KPV-10", "SELANK-10", "KLOW-80"], { fulfillment: "pickup" });
+  const w = q.items.find((i) => i.sku === "BACW-10");
+  assert.ok(w); assert.equal(w.totalCents, 0); assert.equal(w.qty, 1);
 });

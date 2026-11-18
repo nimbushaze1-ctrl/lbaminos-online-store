@@ -65,6 +65,8 @@ app.get("/api/catalog", (req, res) => {
     checkoutEnabled: config.checkoutEnabled,
     tiers: catalog.QTY_TIERS,
     box: catalog.BOX,
+    boxBundle: catalog.BOX_BUNDLE,
+    sale: catalog.SALE,
     fulfillment: config.fulfillment,
     products: catalog.PRODUCTS.map((p) => ({ slug: p.slug, name: p.name, img: p.img, color: p.color, variants: p.variants })),
   });

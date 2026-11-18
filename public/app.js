@@ -44,17 +44,33 @@
     const qty = $("input[name=quantity]", buy);
     let unit = Number(buy.dataset.unit), mg = Number(buy.dataset.mg) || 0;
     let tiers = [{ min: 10, pct: 15 }, { min: 5, pct: 10 }, { min: 3, pct: 5 }, { min: 1, pct: 0 }];
-    fetch("/api/catalog").then((r) => r.json()).then((d) => { tiers = d.tiers; update(); }).catch(() => {});
+    let sale = { bogo: false, pct: 50 };
+    fetch("/api/catalog").then((r) => r.json()).then((d) => { tiers = d.tiers; sale = d.sale || sale; update(); }).catch(() => {});
+    // Mirrors lib/catalog.js linePrice (display only; the server re-prices at checkout).
+    const linePrice = (price, q) => {
+      const t = tiers.find((x) => q >= x.min);
+      const tierTotal = Math.round((price * (100 - t.pct)) / 100) * q;
+      if (sale.bogo && q >= 2) {
+        const half = Math.round((price * (100 - sale.pct)) / 100);
+        const bogo = price * (q - Math.floor(q / 2)) + half * Math.floor(q / 2);
+        if (bogo < tierTotal) return { total: bogo, label: "BOGO 50%" };
+      }
+      return { total: tierTotal, label: t.pct ? `−${t.pct}% bulk` : "List price" };
+    };
     const update = () => {
       const q = Math.max(1, Math.min(50, parseInt(qty.value, 10) || 1));
-      const t = tiers.find((x) => q >= x.min);
-      const u = Math.round((unit * (100 - t.pct)) / 100);
-      $("[data-price]").textContent = q > 1 ? `${money(u * q)} (${money(u)}/vial)` : money(u);
+      const lp = linePrice(unit, q);
+      const u = Math.round(lp.total / q);
+      $("[data-price]").textContent = q > 1 ? `${money(lp.total)} (${money(u)}/vial)` : money(u);
       $("[data-permg]").textContent = mg ? `${money(u / mg)}/mg` : "";
+      const tiersDesc = $$("[data-tier]").map((el) => Number(el.dataset.tier)).sort((a, b) => b - a);
+      const active = tiersDesc.find((m) => q >= m);
       $$("[data-tier]").forEach((el) => {
-        el.classList.toggle("on", Number(el.dataset.tier) === t.min);
-        const tu = $("[data-tier-unit]", el);
-        if (tu) tu.textContent = `${money(Math.round((unit * (100 - Number(el.dataset.pct))) / 100))}/vial`;
+        const m = Number(el.dataset.tier);
+        el.classList.toggle("on", m === active);
+        const x = linePrice(unit, m);
+        const tu = $("[data-tier-unit]", el); if (tu) tu.textContent = `${money(Math.round(x.total / m))}/vial`;
+        const tl = $("[data-tier-label]", el); if (tl) tl.textContent = x.label;
       });
     };
     $$("[data-variant]").forEach((b) => b.addEventListener("click", () => {
@@ -132,7 +148,7 @@
       if (seq !== qseq) return;
       if (!r.ok) { msg.textContent = d.error; if (f.discount_code) { /* show totals without the code */ } return; }
       msg.textContent = explicit && d.discountCode ? `${d.discountLabel} applied.` : "";
-      for (const i of d.items) { const el = $(`[data-line="${i.sku}"]`); if (el) el.innerHTML = `${money(i.totalCents)}${i.tierPct ? `<br><span class="pill">−${i.tierPct}% bulk</span>` : ""}`; }
+      for (const i of d.items) { const el = $(`[data-line="${i.sku}"]`); if (el) el.innerHTML = `${money(i.totalCents)}${i.label ? `<br><span class="pill">${esc(i.label)}</span>` : ""}`; }
       tot.innerHTML = `<dt>Subtotal</dt><dd>${money(d.subtotal)}</dd>${d.discount ? `<dt>${esc(d.discountLabel)}</dt><dd>−${money(d.discount)}</dd>` : ""}<dt>${f.fulfillment === "ship" ? "Shipping" : f.fulfillment === "delivery" ? "Delivery" : "Pickup"}</dt><dd>${d.shipping ? money(d.shipping) : "Free"}</dd><dt class="t">Total</dt><dd class="t">${money(d.total)}</dd>`;
     }
 
@@ -210,7 +226,8 @@
       submit.textContent = full ? "Start my Lab Box" : `Add ${slots - box.length} more compound${slots - box.length === 1 ? "" : "s"} to start`;
       const list = box.reduce((a, s) => a + (find(s)?.v.priceCents || 0), 0);
       const tot = box.reduce((a, s) => a + (find(s) ? boxPrice(find(s).v) : 0), 0);
-      $("[data-bx-totals]").innerHTML = box.length ? `<dt>List price</dt><dd><s>${money(list)}</s></dd><dt>Lab Box ${cat.box.pct}% off</dt><dd>−${money(list - tot)}</dd><dt>Delivery</dt><dd>Free</dd><dt class="t">Per month</dt><dd class="t">${money(tot)}</dd>` : "";
+      const w = cat.boxBundle;
+      $("[data-bx-totals]").innerHTML = box.length ? `<dt>List price</dt><dd><s>${money(list)}</s></dd><dt>Lab Box ${cat.box.pct}% off</dt><dd>−${money(list - tot)}</dd>${w ? `<dt>${esc(w.name)}</dt><dd>Free</dd>` : ""}<dt>Delivery</dt><dd>Free</dd><dt class="t">Per month</dt><dd class="t">${money(tot)}</dd>` : "";
     }
 
     bxForm.addEventListener("submit", async (e) => {

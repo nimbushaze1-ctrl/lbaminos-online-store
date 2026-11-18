@@ -319,3 +319,9 @@ legend{font-weight:600;font-size:.86rem;margin-bottom:.5rem}
 .bx-months{display:flex;gap:.4rem;margin-bottom:.6rem}
 .bx-months span{padding:.35rem .75rem;border-radius:999px;background:#EDE9FE;color:#2E3440;font-size:.78rem;font-weight:600}
 .bx-months .more{background:transparent;border:1px dashed var(--line);color:var(--muted)}
+.pill-sale{background:#DC2626;color:#fff}
+.sale-note{background:#FEE2E2;color:#7F1D1D;border-radius:10px;padding:.6rem .85rem;font-size:.88rem;margin:0 0 .8rem}
+.tiers-pick:has(> :nth-child(5)){grid-template-columns:repeat(5,1fr)}
+@media (max-width:640px){.tiers-pick:has(> :nth-child(5)){grid-template-columns:repeat(3,1fr)}}
+.bx-bundle{display:flex;justify-content:space-between;align-items:center;gap:1rem;background:#DCFCE7;color:#14532D;border-radius:12px;padding:.7rem .9rem;margin:-.4rem 0 1rem;font-size:.88rem}
+.bx-bundle div{display:grid}.bx-bundle div:last-child{text-align:right}.bx-bundle span,.bx-bundle s{font-size:.75rem;opacity:.8}
