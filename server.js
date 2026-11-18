@@ -152,6 +152,7 @@ app.get("/admin", adminAuth, (req, res) => {
   <h1>Admin</h1>
   <div class="note-box ${cs.mode === "not-configured" || !config.checkoutEnabled ? "warn" : ""}"><b>Payments:</b> mode ${e(cs.mode)} · wallet ${cs.walletSet ? "set" : cs.walletInvalid ? "INVALID" : "missing"} · sk_live key ${cs.apiKeySet ? "set" : cs.apiKeyIsTest ? "is sk_test (ignored)" : "not set"} · webhook secret ${cs.webhookSecretSet ? "set" : "missing"} · checkout ${config.checkoutEnabled ? "ENABLED" : "disabled"} · prices ${catalog.PRICES_CONFIRMED ? "confirmed" : "PLACEHOLDER"}</div>
   <p>${subs} email subscribers.</p>
+  <form method="post" action="/admin/test-payment"><button class="btn btn-ghost btn-sm">Run a $1 live test payment</button> <span class="small muted">Real money: refund it to yourself afterwards.</span></form>
   <h2>Orders</h2><div class="table-scroll"><table class="ledger"><thead><tr><th>Created</th><th>Order</th><th>Status</th><th>Email / phone</th><th>Items</th><th>Total</th><th>How</th><th>Tx</th><th></th></tr></thead><tbody>
   ${os.map((o) => `<tr><td class="small">${e(o.created_at.slice(0, 16).replace("T", " "))}</td><td class="mono small"><a href="/order/${e(o.id)}">${e(o.id)}</a></td><td><b>${e(o.status)}</b></td><td class="small">${e(o.email)}<br>${e(o.phone || "")}</td>
   <td class="small">${JSON.parse(o.items).map((i) => `${e(i.name)} ×${i.qty}`).join("<br>")}</td><td class="mono">${m(o.total_cents)}${o.discount_code ? `<br><span class="small">${e(o.discount_code)}</span>` : ""}</td><td class="small">${e(o.fulfillment)}${o.address ? `<br>${e(Object.values(JSON.parse(o.address)).filter(Boolean).join(", "))}` : ""}</td>
@@ -189,6 +190,17 @@ app.post("/admin/box/:id/invoice", adminAuth, async (req, res) => {
 app.post("/admin/box/:id/cancel", adminAuth, (req, res) => {
   db.prepare("UPDATE boxes SET status='cancelled' WHERE id=?").run(req.params.id);
   res.redirect(303, "/admin#boxes");
+});
+// $1 live test payment (PeptidePay has no sandbox): creates a real $1.00 order and opens checkout.
+app.post("/admin/test-payment", adminAuth, async (req, res) => {
+  try {
+    const priced = { items: [{ sku: "TEST-1", slug: null, name: "Test payment", qty: 1, listUnitCents: 100, unitCents: 100, totalCents: 100, tierPct: 0 }], subtotal: 100, discount: 0, discountCode: null, shipping: 0, total: 100 };
+    const o = orders.createOrder({ email: config.brand.email, fulfillment: "pickup", priced, notes: "Admin $1 test payment" });
+    const s = await payments.startSession(o, "LB Aminos test payment", "/admin");
+    res.redirect(303, s.url);
+  } catch (e) {
+    res.status(502).send(`PeptidePay test failed: ${e.message}`);
+  }
 });
 app.post("/admin/fulfill/:id", adminAuth, (req, res) => {
   db.prepare("UPDATE orders SET status='fulfilled' WHERE id=? AND status='paid'").run(req.params.id);
