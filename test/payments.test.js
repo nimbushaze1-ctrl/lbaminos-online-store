@@ -74,8 +74,8 @@ test("checkout prices server-side and ignores client totals", async () => {
   assert.equal(r.status, 200, JSON.stringify(d));
   assert.match(d.url, /^https:\/\/peptide-pay\.com\/session\/cs_/);
   const init = calls.filter((c) => c.url === "/api/v1/checkout/init").at(-1);
-  // SS-31 $90 x3 with BOGO 50% (beats 5% bulk) = 9000+9000+4500 = 22500; KPV $39.99 = 3999; pickup free
-  assert.equal(init.body.amount_cents, 22500 + 3999);
+  // SS-31 $49.99 x3 with BOGO 50% (beats 5% bulk) = 4999+4999+2500; KPV $64.99; pickup free
+  assert.equal(init.body.amount_cents, 4999 * 2 + 2500 + 6499);
   assert.equal(init.body.currency, "USD");
   assert.equal(init.body.wallet, process.env.PEPTIDEPAY_WALLET, "wallet-only mode sends wallet");
   assert.equal(init.headers.authorization, undefined, "no Authorization header in wallet-only mode");
@@ -164,7 +164,7 @@ test("order polling falls back to GET /sessions/{id} when no webhook arrives", a
   const r = await post("/api/checkout", { items: [{ sku: "SELANK-10", quantity: 1 }], email: "c@d.co", fulfillment: "ship", attest: true, address: { line1: "1 Main", city: "Long Beach", state: "CA", zip: "90802" } });
   const d = await r.json();
   const sid = Object.keys(sessionStatus).at(-1);
-  assert.equal(calls.at(-1).body.amount_cents, 2995 + 1500, "shipping added under free threshold");
+  assert.equal(calls.at(-1).body.amount_cents, 4999 + 1500, "shipping added under free threshold");
   sessionStatus[sid] = { ...sessionStatus[sid], status: "paid", txid: "0xbeef" };
   const st = await (await fetch(`${base}/api/order/${d.order_id}`)).json();
   assert.equal(st.status, "paid");
@@ -182,13 +182,14 @@ test("no card input fields anywhere in the site", async () => {
 
 test("Lab Box: 4 picks at 40% off, free delivery, renewal after payment", async () => {
   const box = ["RETA-20", "KLOW-80", "SELANK-10", "SELANK-10"];
+  const oos = "NOPE-1";
   assert.equal((await post("/api/checkout", { box: box.slice(0, 3), email: "box@lab.co", fulfillment: "ship", attest: true, box_terms: true, address: { line1: "1 A", city: "LB", zip: "90802" } })).status, 400);
-  assert.equal((await post("/api/checkout", { box: ["RETA-10", ...box.slice(1)], email: "box@lab.co", fulfillment: "pickup", attest: true, box_terms: true })).status, 400, "out-of-stock size rejected");
+  assert.equal((await post("/api/checkout", { box: [oos, ...box.slice(1)], email: "box@lab.co", fulfillment: "pickup", attest: true, box_terms: true })).status, 400, "unknown SKU rejected");
   assert.equal((await post("/api/checkout", { box, email: "box@lab.co", fulfillment: "pickup", attest: true })).status, 400, "box terms required");
   const r = await post("/api/checkout", { box, email: "box@lab.co", fulfillment: "ship", attest: true, box_terms: true, address: { line1: "1 A", city: "LB", zip: "90802" }, total: 1 });
   const d = await r.json();
   assert.equal(r.status, 200, JSON.stringify(d));
-  const expected = Math.round(12699 * 0.6) + Math.round(9999 * 0.6) + 2 * Math.round(2995 * 0.6);
+  const expected = Math.round(7999 * 0.6) + Math.round(8999 * 0.6) + 2 * Math.round(4999 * 0.6);
   assert.equal(calls.at(-1).body.amount_cents, expected, "40% off list, shipping free");
   const sid = Object.keys(sessionStatus).at(-1);
   sessionStatus[sid] = { ...sessionStatus[sid], status: "paid", txid: "0xb0b" };
@@ -206,9 +207,9 @@ test("Lab Box: 4 picks at 40% off, free delivery, renewal after payment", async 
 test("BOGO 50%: second unit half off, picks the cheaper of BOGO vs bulk", () => {
   const { linePrice, bySku } = require("../lib/catalog");
   const kpv = bySku.get("KPV-10").variant;
-  assert.equal(linePrice(kpv, 1).totalCents, 3999);
-  assert.equal(linePrice(kpv, 2).totalCents, 3999 + 2000);
-  assert.equal(linePrice(kpv, 3).totalCents, 3999 * 2 + 2000);
+  assert.equal(linePrice(kpv, 1).totalCents, 6499);
+  assert.equal(linePrice(kpv, 2).totalCents, 6499 + 3250);
+  assert.equal(linePrice(kpv, 3).totalCents, 6499 * 2 + 3250);
   assert.equal(linePrice(kpv, 2).label, "BOGO 50%");
 });
 
