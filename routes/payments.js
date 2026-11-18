@@ -33,11 +33,11 @@ router.post("/api/checkout", express.json({ limit: "32kb" }), express.urlencoded
     if (!config.checkoutEnabled) return fail(503, "Online checkout opens soon. Call or email us to order for local pickup in the meantime.");
 
     const b = req.body || {};
-    const lines = Array.isArray(b.items) ? b.items : b.product_slug ? [{ product_slug: b.product_slug, quantity: Number(b.quantity || 1) }] : [];
+    const lines = Array.isArray(b.items) ? b.items : b.product_slug ? [{ sku: b.sku, product_slug: b.product_slug, quantity: Number(b.quantity || 1) }] : [];
     const email = orders.normEmail(b.email);
     // Buy-now from a product page has no email yet: send the buyer to the cart to finish details.
     if (!email) {
-      if (b.product_slug && !wantsJson) return res.redirect(303, `/cart?add=${encodeURIComponent(b.product_slug)}&qty=${Number(b.quantity || 1)}`);
+      if (b.product_slug && !wantsJson) return res.redirect(303, `/cart?add=${encodeURIComponent(b.product_slug)}&sku=${encodeURIComponent(b.sku || "")}&qty=${Number(b.quantity || 1)}`);
       return fail(400, "Enter your email to check out.");
     }
     if (!orders.isEmail(email)) return fail(400, "Enter a valid email address.");
@@ -53,22 +53,14 @@ router.post("/api/checkout", express.json({ limit: "32kb" }), express.urlencoded
       if (fulfillment === "ship" && !/^\d{5}(-\d{4})?$/.test(address.zip)) return fail(400, "We ship to US addresses only for now.");
     }
 
-    const priced = orders.priceCart(lines, { fulfillment, discountCode: b.discount_code, email });
+    const isBox = Array.isArray(b.box);
+    if (isBox && b.box_terms !== true) return fail(400, "Please confirm the Lab Box terms: 3 monthly shipments, invoiced monthly.");
+    const priced = isBox ? orders.priceBox(b.box, { fulfillment }) : orders.priceCart(lines, { fulfillment, discountCode: b.discount_code, email });
     if (priced.total < config.minOrderCents) return fail(400, "Order total is too small.");
 
-    const order = orders.createOrder({ email, name: clean(b.name, 120), phone: clean(b.phone, 40), fulfillment, address, priced, notes: clean(b.notes, 500) });
-    const session = await createPeptidePaySession({
-      amountCents: order.total_cents, // authoritative, server-computed
-      currency: order.currency,
-      metadata: { order_id: order.id },
-      successUrl: `${config.siteUrl}/order/${order.id}`,
-      cancelUrl: `${config.siteUrl}/cart?cancelled=${order.id}`,
-      customerEmail: email,
-      productName: priced.items.length === 1 ? `${priced.items[0].name} ×${priced.items[0].qty}` : `LB Aminos order (${priced.items.length} items)`,
-      webhookUrl: `${config.siteUrl}/api/peptidepay-webhook`,
-      idempotencyKey: order.id,
-    });
-    orders.attachSession(order.id, session);
+    const box = isBox ? orders.createBox({ email, name: clean(b.name, 120), phone: clean(b.phone, 40), fulfillment, address, skus: b.box.map(String) }) : null;
+    const order = orders.createOrder({ email, name: clean(b.name, 120), phone: clean(b.phone, 40), fulfillment, address, priced, notes: box ? "Lab Box month 1" : clean(b.notes, 500), boxId: box?.id });
+    const session = await startSession(order, box ? "LB Aminos Lab Box, month 1" : priced.items.length === 1 ? `${priced.items[0].name} ×${priced.items[0].qty}` : `LB Aminos order (${priced.items.length} items)`, box ? "/lab-box" : "/cart");
     return wantsJson ? res.json({ url: session.url, order_id: order.id }) : res.redirect(303, session.url);
   } catch (e) {
     if (e.userFacing) return fail(400, e.message);
@@ -76,6 +68,23 @@ router.post("/api/checkout", express.json({ limit: "32kb" }), express.urlencoded
     return fail(502, "We couldn't start checkout. Please try again in a moment.");
   }
 });
+
+/** Create the PeptidePay session for an existing order (also used for Lab Box monthly invoices). */
+async function startSession(order, productName, cancelPath = "/cart") {
+  const session = await createPeptidePaySession({
+    amountCents: order.total_cents, // authoritative, server-computed
+    currency: order.currency,
+    metadata: { order_id: order.id },
+    successUrl: `${config.siteUrl}/order/${order.id}`,
+    cancelUrl: `${config.siteUrl}${cancelPath}?cancelled=${order.id}`,
+    customerEmail: order.email,
+    productName,
+    webhookUrl: `${config.siteUrl}/api/peptidepay-webhook`,
+    idempotencyKey: order.id,
+  });
+  orders.attachSession(order.id, session);
+  return session;
+}
 
 /**
  * POST /api/peptidepay-webhook
@@ -150,4 +159,5 @@ router.get("/api/order/:id", async (req, res) => {
   res.set("Cache-Control", "no-store").json({ status, amount: o.total_cents, currency: o.currency });
 });
 
+router.startSession = startSession;
 module.exports = router;

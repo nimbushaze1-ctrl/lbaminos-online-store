@@ -276,3 +276,46 @@ legend{font-weight:600;font-size:.86rem;margin-bottom:.5rem}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:.75rem 1.2rem;border-radius:999px;font-weight:600;z-index:50;box-shadow:var(--shadow)}
 .toast[hidden]{display:none}
 [hidden]{display:none!important}
+.sizes{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:0 0 1rem}
+.sizes-label{font:600 .72rem var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-right:.4rem}
+.size{display:grid;gap:.1rem;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:.55rem .85rem;cursor:pointer;color:var(--ink);font:inherit}
+.size b{font-size:.9rem}.size span{font:500 .78rem var(--f-mono);color:var(--muted)}.size em{font-style:normal;font-size:.7rem;color:var(--warn)}
+.size.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+
+/* Lab Box */
+.box-promo{background:linear-gradient(135deg,#EDE9FE,#DCE8F5)}
+@media (prefers-color-scheme:dark){.box-promo{background:linear-gradient(135deg,#2E2748,#26354A)}}
+.box-facts,.bx-facts{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.box-facts li,.bx-facts li{background:var(--surface);border-radius:var(--r);padding:1.1rem;display:grid;gap:.2rem}
+.box-facts b,.bx-facts b{font:700 1.8rem/1 var(--f-display)}.box-facts span,.bx-facts span{color:var(--muted);font-size:.85rem}
+.bx .lede{max-width:62ch}
+.bx-facts{grid-template-columns:repeat(4,1fr);margin:1.5rem 0 2rem}
+.bx-facts .f1{background:#FEF3C7}.bx-facts .f2{background:#DCFCE7}.bx-facts .f3{background:#DBEAFE}.bx-facts .f4{background:#EDE9FE}
+.bx-facts li b,.bx-facts li span{color:#2E3440}
+@media (max-width:860px){.bx-facts{grid-template-columns:1fr 1fr}}
+.bx-grid{display:grid;grid-template-columns:1fr 360px;gap:2rem;align-items:start}
+@media (max-width:960px){.bx-grid{grid-template-columns:1fr}}
+.bx-search{max-width:none;margin-bottom:1rem;border-radius:999px}
+.bx-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem}
+.bx-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column}
+.bx-img{background:linear-gradient(180deg,color-mix(in srgb,var(--pc) 16%,var(--surface)),var(--surface));padding-top:.8rem}
+.bx-img img{height:170px;width:auto;margin:0 auto}
+.bx-body{padding:1rem;display:grid;gap:.5rem}
+.bx-body h3{margin:0;font-size:1rem}
+.bx-sizes{display:grid;gap:.35rem}
+.bx-size{display:flex;justify-content:space-between;align-items:center;padding:.45rem .75rem;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:500 .85rem var(--f-body);cursor:pointer}
+.bx-size b{font:500 .8rem var(--f-mono)}
+.bx-size.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.bx-size[disabled]{opacity:.4;cursor:not-allowed}
+.bx-price{margin:0}.bx-price b{font:700 1.15rem var(--f-display)}
+.bx-panel{position:sticky;top:90px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:1.3rem;box-shadow:var(--shadow)}
+.bx-panel h3{display:flex;justify-content:space-between;align-items:baseline}
+.bx-slots{list-style:none;padding:0;margin:0 0 1rem;display:grid;gap:.5rem}
+.bx-slots li{display:grid;grid-template-columns:26px 1fr auto auto;gap:.6rem;align-items:center;border:1px solid var(--line);border-left:3px solid var(--pc,var(--line));border-radius:12px;padding:.6rem .8rem;font-size:.9rem}
+.bx-slots li.empty{border-style:dashed;color:var(--muted);grid-template-columns:26px 1fr}
+.bx-slots li > span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);font:500 .72rem var(--f-mono)}
+.bx-slots em{font-style:normal;color:var(--muted)}
+.bx-slots .link{font-size:1.2rem;text-decoration:none}
+.bx-months{display:flex;gap:.4rem;margin-bottom:.6rem}
+.bx-months span{padding:.35rem .75rem;border-radius:999px;background:#EDE9FE;color:#2E3440;font-size:.78rem;font-weight:600}
+.bx-months .more{background:transparent;border:1px dashed var(--line);color:var(--muted)}

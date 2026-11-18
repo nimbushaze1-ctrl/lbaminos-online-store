@@ -42,7 +42,7 @@
   const buy = $("[data-buy]");
   if (buy) {
     const qty = $("input[name=quantity]", buy);
-    const unit = Number(buy.dataset.unit), mg = Number(buy.dataset.mg) || 0;
+    let unit = Number(buy.dataset.unit), mg = Number(buy.dataset.mg) || 0;
     let tiers = [{ min: 10, pct: 15 }, { min: 5, pct: 10 }, { min: 3, pct: 5 }, { min: 1, pct: 0 }];
     fetch("/api/catalog").then((r) => r.json()).then((d) => { tiers = d.tiers; update(); }).catch(() => {});
     const update = () => {
@@ -51,13 +51,25 @@
       const u = Math.round((unit * (100 - t.pct)) / 100);
       $("[data-price]").textContent = q > 1 ? `${money(u * q)} (${money(u)}/vial)` : money(u);
       $("[data-permg]").textContent = mg ? `${money(u / mg)}/mg` : "";
-      $$("[data-tier]").forEach((el) => el.classList.toggle("on", Number(el.dataset.tier) === t.min));
+      $$("[data-tier]").forEach((el) => {
+        el.classList.toggle("on", Number(el.dataset.tier) === t.min);
+        const tu = $("[data-tier-unit]", el);
+        if (tu) tu.textContent = `${money(Math.round((unit * (100 - Number(el.dataset.pct))) / 100))}/vial`;
+      });
     };
+    $$("[data-variant]").forEach((b) => b.addEventListener("click", () => {
+      $$("[data-variant]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", String(x === b)); });
+      unit = Number(b.dataset.unit); mg = Number(b.dataset.mg) || 0;
+      buy.dataset.sku = b.dataset.variant;
+      buy.querySelector("input[name=sku]").value = b.dataset.variant;
+      const lbl = $("[data-size-label]"); if (lbl) lbl.textContent = b.dataset.size;
+      $$("[data-needs-stock]", buy).forEach((x) => (x.disabled = b.dataset.stock !== "1"));
+      update();
+    }));
     $$("[data-step]", buy).forEach((b) => b.addEventListener("click", () => { qty.value = Math.max(1, Math.min(50, (parseInt(qty.value, 10) || 1) + Number(b.dataset.step))); update(); }));
     $$("[data-tier]").forEach((b) => b.addEventListener("click", () => { qty.value = b.dataset.tier; update(); }));
     qty.addEventListener("input", update);
     $("[data-add-qty]", buy).addEventListener("click", () => add(buy.dataset.sku, Math.max(1, parseInt(qty.value, 10) || 1)));
-    // "Buy now" posts { product_slug, quantity } to /api/checkout; the server sends us to the cart to add email + fulfillment.
     update();
   }
 
@@ -73,7 +85,7 @@
       catalog = d;
       if (params.get("add")) {
         const p = d.products.find((x) => x.slug === params.get("add"));
-        const v = p && (p.variants.find((x) => x.inStock) || p.variants[0]);
+        const v = p && (p.variants.find((x) => x.sku === params.get("sku") && x.inStock) || p.variants.find((x) => x.inStock) || p.variants[0]);
         if (v) { const c = cart(); c[v.sku] = Math.min(50, Math.max(1, parseInt(params.get("qty"), 10) || 1)); saveCart(c); }
         history.replaceState(null, "", "/cart");
       }
@@ -143,6 +155,77 @@
         store.set("lb_last_order", d.order_id);
         location.href = d.url; // PeptidePay hosted checkout
       } catch (err) { msg.textContent = err.message; btn.disabled = false; }
+    });
+  }
+
+  // ---- Lab Box builder ----
+  const bxForm = $("[data-bx-form]");
+  if (bxForm) {
+    let cat = null;
+    let box = store.get("lb_box", []);
+    const msg = $("[data-msg]", bxForm);
+    const submit = $("[data-bx-submit]");
+    fetch("/api/catalog").then((r) => r.json()).then((d) => {
+      cat = d;
+      box = box.filter((sku) => find(sku)?.v.inStock).slice(0, d.box.slots);
+      if (new URLSearchParams(location.search).get("cancelled")) msg.textContent = "Payment was cancelled. Your box is saved.";
+      draw();
+    });
+    const find = (sku) => { if (!cat) return null; for (const p of cat.products) for (const v of p.variants) if (v.sku === sku) return { p, v }; return null; };
+    const boxPrice = (v) => Math.round((v.priceCents * (100 - cat.box.pct)) / 100);
+
+    $$("[data-bx-product]").forEach((card) => {
+      $$("[data-bx-size]", card).forEach((b) => b.addEventListener("click", () => {
+        $$("[data-bx-size]", card).forEach((x) => x.classList.toggle("on", x === b));
+        const x = find(b.dataset.bxSize); if (!x) return;
+        $("[data-bx-price]", card).textContent = money(boxPrice(x.v));
+        $("[data-bx-list]", card).textContent = money(x.v.priceCents);
+        $("[data-bx-add]", card).dataset.bxAdd = x.v.sku;
+      }));
+      $("[data-bx-add]", card).addEventListener("click", (e) => {
+        if (!cat) return;
+        if (box.length >= cat.box.slots) return toast(`Your box is full. Remove one to swap.`);
+        box.push(e.currentTarget.dataset.bxAdd); draw();
+      });
+    });
+    const search = $("[data-bx-search]");
+    if (search) search.addEventListener("input", () => { const q = search.value.toLowerCase(); $$("[data-bx-product]").forEach((c) => (c.hidden = q && !c.textContent.toLowerCase().includes(q))); });
+
+    $("[data-bx-slots]").addEventListener("click", (e) => { const b = e.target.closest("[data-bx-rm]"); if (b) { box.splice(Number(b.dataset.bxRm), 1); draw(); } });
+    const fd = () => Object.fromEntries(new FormData(bxForm));
+    bxForm.addEventListener("change", () => { $("[data-addr]", bxForm).hidden = fd().fulfillment === "pickup"; });
+
+    function draw() {
+      store.set("lb_box", box);
+      const slots = cat.box.slots;
+      $("[data-bx-count]").textContent = `${box.length} of ${slots} selected`;
+      $("[data-bx-slots]").innerHTML = Array.from({ length: slots }, (_, i) => {
+        const x = box[i] && find(box[i]);
+        return x ? `<li style="--pc:${x.p.color}"><span>${i + 1}</span><div><b>${esc(x.p.name)}</b> <em>${esc(x.v.size)}</em></div><b class="mono">${money(boxPrice(x.v))}</b><button type="button" class="link" data-bx-rm="${i}" aria-label="Remove">×</button></li>`
+          : `<li class="empty"><span>${i + 1}</span><em>${i === box.length ? "Select your next compound" : "Empty slot"}</em></li>`;
+      }).join("");
+      const full = box.length === slots;
+      $("[data-bx-checkout]").hidden = !full;
+      submit.disabled = !full || !cat.checkoutEnabled;
+      submit.textContent = full ? "Start my Lab Box" : `Add ${slots - box.length} more compound${slots - box.length === 1 ? "" : "s"} to start`;
+      const list = box.reduce((a, s) => a + (find(s)?.v.priceCents || 0), 0);
+      const tot = box.reduce((a, s) => a + (find(s) ? boxPrice(find(s).v) : 0), 0);
+      $("[data-bx-totals]").innerHTML = box.length ? `<dt>List price</dt><dd><s>${money(list)}</s></dd><dt>Lab Box ${cat.box.pct}% off</dt><dd>−${money(list - tot)}</dd><dt>Delivery</dt><dd>Free</dd><dt class="t">Per month</dt><dd class="t">${money(tot)}</dd>` : "";
+    }
+
+    bxForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = fd();
+      if (!f.email) return (msg.textContent = "Enter your email.");
+      if (!f.box_terms || !f.attest) return (msg.textContent = "Please confirm both statements.");
+      submit.disabled = true; msg.textContent = "Starting secure checkout…";
+      try {
+        const r = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ box, email: f.email, name: f.name, phone: f.phone, fulfillment: f.fulfillment, attest: true, box_terms: true, address: { line1: f.line1, city: f.city, state: f.state, zip: f.zip } }) });
+        const d = await r.json();
+        if (!r.ok || !d.url) throw new Error(d.error || "Checkout failed.");
+        location.href = d.url;
+      } catch (err) { msg.textContent = err.message; submit.disabled = false; }
     });
   }
 

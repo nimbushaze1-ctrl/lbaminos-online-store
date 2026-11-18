@@ -74,8 +74,8 @@ test("checkout prices server-side and ignores client totals", async () => {
   assert.equal(r.status, 200, JSON.stringify(d));
   assert.match(d.url, /^https:\/\/peptide-pay\.com\/session\/cs_/);
   const init = calls.filter((c) => c.url === "/api/v1/checkout/init").at(-1);
-  // SS-31 $90 x3 at 5% off = 3 x 8550 = 25650; KPV $60 = 6000; pickup free
-  assert.equal(init.body.amount_cents, 25650 + 6000);
+  // SS-31 $90 x3 at 5% off = 3 x 8550 = 25650; KPV $39.99 = 3999; pickup free
+  assert.equal(init.body.amount_cents, 25650 + 3999);
   assert.equal(init.body.currency, "USD");
   assert.equal(init.body.wallet, process.env.PEPTIDEPAY_WALLET, "wallet-only mode sends wallet");
   assert.equal(init.headers.authorization, undefined, "no Authorization header in wallet-only mode");
@@ -164,7 +164,7 @@ test("order polling falls back to GET /sessions/{id} when no webhook arrives", a
   const r = await post("/api/checkout", { items: [{ sku: "SELANK-10", quantity: 1 }], email: "c@d.co", fulfillment: "ship", attest: true, address: { line1: "1 Main", city: "Long Beach", state: "CA", zip: "90802" } });
   const d = await r.json();
   const sid = Object.keys(sessionStatus).at(-1);
-  assert.equal(calls.at(-1).body.amount_cents, 6000 + 1500, "shipping added under free threshold");
+  assert.equal(calls.at(-1).body.amount_cents, 2995 + 1500, "shipping added under free threshold");
   sessionStatus[sid] = { ...sessionStatus[sid], status: "paid", txid: "0xbeef" };
   const st = await (await fetch(`${base}/api/order/${d.order_id}`)).json();
   assert.equal(st.status, "paid");
@@ -178,4 +178,27 @@ test("no card input fields anywhere in the site", async () => {
   }
   const js = fs.readFileSync(path.join(__dirname, "..", "public", "app.js"), "utf8");
   assert.doesNotMatch(js, /PEPTIDEPAY_|sk_live|whsec/);
+});
+
+test("Lab Box: 4 picks at 40% off, free delivery, renewal after payment", async () => {
+  const box = ["RETA-20", "KLOW-80", "SELANK-10", "SELANK-10"];
+  assert.equal((await post("/api/checkout", { box: box.slice(0, 3), email: "box@lab.co", fulfillment: "ship", attest: true, box_terms: true, address: { line1: "1 A", city: "LB", zip: "90802" } })).status, 400);
+  assert.equal((await post("/api/checkout", { box: ["RETA-10", ...box.slice(1)], email: "box@lab.co", fulfillment: "pickup", attest: true, box_terms: true })).status, 400, "out-of-stock size rejected");
+  assert.equal((await post("/api/checkout", { box, email: "box@lab.co", fulfillment: "pickup", attest: true })).status, 400, "box terms required");
+  const r = await post("/api/checkout", { box, email: "box@lab.co", fulfillment: "ship", attest: true, box_terms: true, address: { line1: "1 A", city: "LB", zip: "90802" }, total: 1 });
+  const d = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(d));
+  const expected = Math.round(12699 * 0.6) + Math.round(9999 * 0.6) + 2 * Math.round(2995 * 0.6);
+  assert.equal(calls.at(-1).body.amount_cents, expected, "40% off list, shipping free");
+  const sid = Object.keys(sessionStatus).at(-1);
+  sessionStatus[sid] = { ...sessionStatus[sid], status: "paid", txid: "0xb0b" };
+  assert.equal((await (await fetch(`${base}/api/order/${d.order_id}`)).json()).status, "paid");
+  const orders = require("../lib/orders");
+  const { db } = require("../lib/db");
+  const boxId = db.prepare("SELECT box_id FROM orders WHERE id=?").get(d.order_id).box_id;
+  assert.equal(orders.getBox(boxId).months_paid, 1);
+  assert.equal(orders.getBox(boxId).status, "active");
+  const renewal = orders.createBoxRenewal(boxId);
+  assert.equal(renewal.total_cents, expected);
+  assert.equal(orders.createBoxRenewal(boxId).id, renewal.id, "only one open invoice at a time");
 });

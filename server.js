@@ -25,7 +25,8 @@ app.use((req, res, next) => {
 });
 
 // Payment routes first: the webhook needs the raw body, so no global JSON parser.
-app.use(require("./routes/payments"));
+const payments = require("./routes/payments");
+app.use(payments);
 
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
 
@@ -39,6 +40,7 @@ app.get("/product/:slug", (req, res) => {
   return p ? html(res, views.product(p)) : html(res, views.notFound(), 404);
 });
 app.get("/cart", (req, res) => html(res, views.cart()));
+app.get("/lab-box", (req, res) => html(res, views.labBox()));
 app.get("/order/:id", (req, res) => {
   const o = orders.getOrder(req.params.id);
   res.set("Cache-Control", "no-store");
@@ -62,6 +64,7 @@ app.get("/api/catalog", (req, res) => {
     pricesConfirmed: catalog.PRICES_CONFIRMED,
     checkoutEnabled: config.checkoutEnabled,
     tiers: catalog.QTY_TIERS,
+    box: catalog.BOX,
     fulfillment: config.fulfillment,
     products: catalog.PRODUCTS.map((p) => ({ slug: p.slug, name: p.name, img: p.img, color: p.color, variants: p.variants })),
   });
@@ -78,6 +81,14 @@ app.post("/api/quote", jsonBody, (req, res) => {
     res.json(q);
   } catch (e) {
     res.status(400).json({ error: e.userFacing ? e.message : "Couldn't price the cart." });
+  }
+});
+
+app.post("/api/box-quote", jsonBody, (req, res) => {
+  try {
+    res.json(orders.priceBox(req.body?.box, { fulfillment: clean(req.body?.fulfillment, 20) || "pickup" }));
+  } catch (e) {
+    res.status(400).json({ error: e.userFacing ? e.message : "Couldn't price the box." });
   }
 });
 
@@ -110,7 +121,7 @@ app.post("/api/contact", jsonBody, (req, res) => {
 // ---------- SEO ----------
 app.get("/robots.txt", (req, res) => res.type("text").send(`User-agent: *\nDisallow: /admin\nDisallow: /order/\nDisallow: /api/\nSitemap: ${config.siteUrl}/sitemap.xml\n`));
 app.get("/sitemap.xml", (req, res) => {
-  const urls = ["/", "/shop", "/coa", "/pickup", "/research", "/help", "/contact", ...Object.keys(views.PAGES), ...catalog.PRODUCTS.map((p) => `/product/${p.slug}`)];
+  const urls = ["/", "/shop", "/lab-box", "/coa", "/pickup", "/research", "/help", "/contact", ...Object.keys(views.PAGES), ...catalog.PRODUCTS.map((p) => `/product/${p.slug}`)];
   res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((u) => `<url><loc>${config.siteUrl}${u}</loc></url>`).join("")}</urlset>`);
 });
 app.get("/healthz", (req, res) => res.json({ ok: true }));
@@ -144,12 +155,38 @@ app.get("/admin", adminAuth, (req, res) => {
   <td class="small">${JSON.parse(o.items).map((i) => `${e(i.name)} ×${i.qty}`).join("<br>")}</td><td class="mono">${m(o.total_cents)}${o.discount_code ? `<br><span class="small">${e(o.discount_code)}</span>` : ""}</td><td class="small">${e(o.fulfillment)}${o.address ? `<br>${e(Object.values(JSON.parse(o.address)).filter(Boolean).join(", "))}` : ""}</td>
   <td class="mono small">${o.txid ? e(o.txid.slice(0, 12)) + "…" : ""}</td><td>${o.status === "paid" ? `<form method="post" action="/admin/fulfill/${e(o.id)}"><button class="btn btn-ghost btn-sm">Mark fulfilled</button></form>` : ""}</td></tr>`).join("") || `<tr><td colspan="9" class="muted">No orders yet.</td></tr>`}
   </tbody></table></div>
+  <h2 id="boxes">Lab Boxes</h2><p class="small muted">Each month, press “Create invoice” and send the customer the payment link. Minimum ${catalog.BOX.months} months.</p>
+  <div class="table-scroll"><table class="ledger"><thead><tr><th>Started</th><th>Box</th><th>Status</th><th>Customer</th><th>Compounds</th><th>Months paid</th><th>Next invoice</th><th></th></tr></thead><tbody>
+  ${db.prepare("SELECT * FROM boxes ORDER BY created_at DESC LIMIT 200").all().map((b) => {
+    const open = db.prepare("SELECT id, session_url, total_cents FROM orders WHERE box_id = ? AND status = 'pending' ORDER BY created_at DESC").get(b.id);
+    const names = JSON.parse(b.skus).map((k) => { const x = catalog.bySku.get(k); return x ? `${x.product.name} ${x.variant.size}` : k; });
+    return `<tr><td class="small">${e(b.created_at.slice(0, 10))}</td><td class="mono small">${e(b.id)}</td><td><b>${e(b.status)}</b></td><td class="small">${e(b.email)}<br>${e(b.phone || "")}</td><td class="small">${names.map(e).join("<br>")}</td><td class="mono">${b.months_paid}</td>
+    <td class="small">${open ? `${m(open.total_cents)} <a href="${e(open.session_url || "")}">payment link</a><br><span class="mono">${e(open.id)}</span>` : "—"}</td>
+    <td>${b.status === "active" && !open ? `<form method="post" action="/admin/box/${e(b.id)}/invoice"><button class="btn btn-ghost btn-sm">Create invoice</button></form>` : ""}${b.status !== "cancelled" && b.months_paid >= catalog.BOX.months ? `<form method="post" action="/admin/box/${e(b.id)}/cancel"><button class="btn btn-ghost btn-sm">Cancel</button></form>` : ""}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">No Lab Boxes yet.</td></tr>`}
+  </tbody></table></div>
   <h2>Pickup requests</h2><table class="ledger"><tbody>${pk.map((p) => `<tr><td class="small">${e(p.created_at.slice(0, 16))}</td><td>${e(p.name)}</td><td>${e(p.contact)}</td><td>${e(p.preferred)}</td><td class="mono small">${e(p.order_id)}</td><td class="small">${e(p.note)}</td></tr>`).join("") || `<tr><td class="muted">None yet.</td></tr>`}</tbody></table>
   <h2>Messages</h2><table class="ledger"><tbody>${ms.map((p) => `<tr><td class="small">${e(p.created_at.slice(0, 16))}</td><td>${e(p.name)}</td><td>${e(p.contact)}</td><td>${e(p.topic)}</td><td class="small">${e(p.body)}</td></tr>`).join("") || `<tr><td class="muted">None yet.</td></tr>`}</tbody></table>
   <h2>Referral credits owed</h2><table class="ledger"><tbody>${refs.map((r) => `<tr><td class="mono">${e(r.code)}</td><td>${e(r.owner_email)}</td><td>${r.n} paid referral(s) = ${m(r.n * config.discounts.referralCreditCents)}</td></tr>`).join("") || `<tr><td class="muted">None yet.</td></tr>`}</tbody></table>
   </div></section>`;
   res.set("Cache-Control", "no-store");
   html(res, views.layout({ title: "Admin", path: "/admin", body }));
+});
+app.post("/admin/box/:id/invoice", adminAuth, async (req, res) => {
+  try {
+    const o = orders.createBoxRenewal(req.params.id);
+    if (!o.session_url) {
+      const b = orders.getBox(req.params.id);
+      await payments.startSession(o, `LB Aminos Lab Box, month ${b.months_paid + 1}`, "/lab-box");
+    }
+    res.redirect(303, "/admin#boxes");
+  } catch (e) {
+    res.status(400).send(e.userFacing ? e.message : `Couldn't create the invoice: ${e.message}`);
+  }
+});
+app.post("/admin/box/:id/cancel", adminAuth, (req, res) => {
+  db.prepare("UPDATE boxes SET status='cancelled' WHERE id=?").run(req.params.id);
+  res.redirect(303, "/admin#boxes");
 });
 app.post("/admin/fulfill/:id", adminAuth, (req, res) => {
   db.prepare("UPDATE orders SET status='fulfilled' WHERE id=? AND status='paid'").run(req.params.id);
