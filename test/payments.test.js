@@ -180,7 +180,7 @@ test("no card input fields anywhere in the site", async () => {
   assert.doesNotMatch(js, /PEPTIDEPAY_|sk_live|whsec/);
 });
 
-test("Lab Box: 4 picks at 40% off, free delivery, renewal after payment", async () => {
+test("Lab Box: 4 picks at 20% off, free delivery, renewal after payment", async () => {
   const box = ["RETA-20", "KLOW-80", "SELANK-10", "SELANK-10"];
   const oos = "NOPE-1";
   assert.equal((await post("/api/checkout", { box: box.slice(0, 3), email: "box@lab.co", fulfillment: "ship", attest: true, box_terms: true, address: { line1: "1 A", city: "LB", zip: "90802" } })).status, 400);
@@ -189,8 +189,8 @@ test("Lab Box: 4 picks at 40% off, free delivery, renewal after payment", async 
   const r = await post("/api/checkout", { box, email: "box@lab.co", fulfillment: "ship", attest: true, box_terms: true, address: { line1: "1 A", city: "LB", zip: "90802" }, total: 1 });
   const d = await r.json();
   assert.equal(r.status, 200, JSON.stringify(d));
-  const expected = Math.round(7999 * 0.6) + Math.round(8999 * 0.6) + 2 * Math.round(4999 * 0.6);
-  assert.equal(calls.at(-1).body.amount_cents, expected, "40% off list, shipping free");
+  const expected = Math.round(7999 * 0.8) + Math.round(8999 * 0.8) + 2 * Math.round(4999 * 0.8);
+  assert.equal(calls.at(-1).body.amount_cents, expected, "20% off list, shipping free");
   const sid = Object.keys(sessionStatus).at(-1);
   sessionStatus[sid] = { ...sessionStatus[sid], status: "paid", txid: "0xb0b" };
   assert.equal((await (await fetch(`${base}/api/order/${d.order_id}`)).json()).status, "paid");
