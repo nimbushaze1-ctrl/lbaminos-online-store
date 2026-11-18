@@ -1,0 +1,20 @@
+{
+  "name": "lb-aminos-store",
+  "version": "1.0.0",
+  "description": "LB Aminos online store with PeptidePay checkout",
+  "main": "server.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "4.21.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}
