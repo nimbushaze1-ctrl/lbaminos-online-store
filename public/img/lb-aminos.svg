@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="34 13 726 348">
+  <title>LB Aminos</title>
+  <defs>
+    <linearGradient id="ink" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#151515"/>
+      <stop offset=".5" stop-color="#151515"/>
+      <stop offset="1" stop-color="#151515"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#ink)">
+    <path d="M130 90h44l-74 142h149l-16 32H42z"/>
+    <path fill-rule="evenodd" d="M352 90h170c35 0 58 13 58 38 0 16-10 28-28 37 19 7 28 20 28 36 0 37-34 63-82 63H265l54-107h193c17 0 28-9 28-21 0-10-8-16-22-16H336zm-9 95-20 47h172c27 0 43-12 43-28 0-12-10-19-25-19z"/>
+    <path d="M682 20c5 35 6 55 13 62 7 6 28 7 58 11-30 4-51 5-58 11-7 7-8 27-13 62-5-35-6-55-13-62-7-6-28-7-61-11 33-4 54-5 61-11 7-7 8-27 13-62z"/>
+  </g>
+  <g fill="#151515" fill-rule="evenodd">
+    <path d="M49 351l26-42h9l26 42H98l-6-10H66l-6 10zm22-19h16l-8-14z"/>
+    <path d="M180 351v-42h9l21 26 20-26h9v42h-10v-26l-19 23-20-23v26z"/>
+    <path d="M311 309h10v42h-10z"/>
+    <path d="M396 351v-42h9l33 28v-28h10v42h-9l-33-28v28z"/>
+    <path d="M531 309h34q10 0 10 10v22q0 10-10 10h-34q-11 0-11-10v-22q0-10 11-10zm0 9v24h33v-24z"/>
+    <path d="M660 309h28q10 0 10 9v2h-10v-2h-30v8h30q11 0 11 10v5q0 10-11 10h-32q-11 0-11-10v-2h11v3h32v-8h-30q-11 0-11-10v-5q0-10 13-10z"/>
+  </g>
+</svg>

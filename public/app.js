@@ -79,7 +79,11 @@
       buy.dataset.sku = b.dataset.variant;
       buy.querySelector("input[name=sku]").value = b.dataset.variant;
       const lbl = $("[data-size-label]"); if (lbl) lbl.textContent = b.dataset.size;
-      const im = $("[data-pdp-img]"); if (im && b.dataset.img) { im.src = b.dataset.img; }
+      const image = $("[data-pdp-img]");
+      if (image && b.dataset.img) {
+        image.src = b.dataset.img;
+        image.alt = b.dataset.imgAlt;
+      }
       $$("[data-needs-stock]", buy).forEach((x) => (x.disabled = b.dataset.stock !== "1"));
       update();
     }));
@@ -195,6 +199,9 @@
       $$("[data-bx-size]", card).forEach((b) => b.addEventListener("click", () => {
         $$("[data-bx-size]", card).forEach((x) => x.classList.toggle("on", x === b));
         const x = find(b.dataset.bxSize); if (!x) return;
+        const image = $("[data-bx-img]", card);
+        image.src = x.v.img;
+        image.alt = `${x.p.name} ${x.v.size} research vial`;
         $("[data-bx-price]", card).textContent = money(boxPrice(x.v));
         $("[data-bx-list]", card).textContent = money(x.v.priceCents);
         $("[data-bx-add]", card).dataset.bxAdd = x.v.sku;
