@@ -30,6 +30,7 @@ app.use(payments);
 
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
 
+const popularity = require("./lib/popularity");
 const html = (res, s, code = 200) => res.status(code).type("html").send(s);
 
 // ---------- pages ----------
@@ -37,7 +38,9 @@ app.get("/", (req, res) => html(res, views.home()));
 app.get("/shop", (req, res) => html(res, views.shop(String(req.query.cat || ""))));
 app.get("/product/:slug", (req, res) => {
   const p = catalog.bySlug.get(req.params.slug);
-  return p ? html(res, views.product(p)) : html(res, views.notFound(), 404);
+  if (!p) return html(res, views.notFound(), 404);
+  try { popularity.record(req, p.slug); } catch (e) { console.error("view count failed", e.message); }
+  return html(res, views.product(p));
 });
 app.get("/cart", (req, res) => html(res, views.cart()));
 app.get("/lab-box", (req, res) => html(res, views.labBox()));
@@ -168,6 +171,7 @@ app.get("/admin", adminAuth, (req, res) => {
     <td>${b.status === "active" && !open ? `<form method="post" action="/admin/box/${e(b.id)}/invoice"><button class="btn btn-ghost btn-sm">Create invoice</button></form>` : ""}${b.status !== "cancelled" && b.months_paid >= catalog.BOX.months ? `<form method="post" action="/admin/box/${e(b.id)}/cancel"><button class="btn btn-ghost btn-sm">Cancel</button></form>` : ""}</td></tr>`;
   }).join("") || `<tr><td colspan="8" class="muted">No Lab Boxes yet.</td></tr>`}
   </tbody></table></div>
+  <h2>Product views (last 30 days)</h2><p class="small muted">The homepage features the top 8 by views once there are at least 20 views in total. Until then it uses the catalog order.</p><table class="ledger"><tbody>${(() => { const c = popularity.counts(); return catalog.PRODUCTS.map((p) => [p, c.get(p.slug) || 0]).sort((a, b) => b[1] - a[1]).map(([p, n], i) => `<tr><td class="mono">${i + 1}</td><td>${e(p.name)}</td><td class="mono">${n}</td></tr>`).join(""); })()}</tbody></table>
   <h2>Pickup requests</h2><table class="ledger"><tbody>${pk.map((p) => `<tr><td class="small">${e(p.created_at.slice(0, 16))}</td><td>${e(p.name)}</td><td>${e(p.contact)}</td><td>${e(p.preferred)}</td><td class="mono small">${e(p.order_id)}</td><td class="small">${e(p.note)}</td></tr>`).join("") || `<tr><td class="muted">None yet.</td></tr>`}</tbody></table>
   <h2>Messages</h2><table class="ledger"><tbody>${ms.map((p) => `<tr><td class="small">${e(p.created_at.slice(0, 16))}</td><td>${e(p.name)}</td><td>${e(p.contact)}</td><td>${e(p.topic)}</td><td class="small">${e(p.body)}</td></tr>`).join("") || `<tr><td class="muted">None yet.</td></tr>`}</tbody></table>
   <h2>Referral credits owed</h2><table class="ledger"><tbody>${refs.map((r) => `<tr><td class="mono">${e(r.code)}</td><td>${e(r.owner_email)}</td><td>${r.n} paid referral(s) = ${m(r.n * config.discounts.referralCreditCents)}</td></tr>`).join("") || `<tr><td class="muted">None yet.</td></tr>`}</tbody></table>

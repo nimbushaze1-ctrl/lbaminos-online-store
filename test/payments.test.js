@@ -219,3 +219,19 @@ test("Lab Box includes free bacteriostatic water line", async () => {
   const w = q.items.find((i) => i.sku === "BACW-10");
   assert.ok(w); assert.equal(w.totalCents, 0); assert.equal(w.qty, 1);
 });
+
+test("homepage features most-viewed products once there is enough data", async () => {
+  const popularity = require("../lib/popularity");
+  const catalog = require("../lib/catalog");
+  const before = popularity.ranked();
+  const target = catalog.PRODUCTS[catalog.PRODUCTS.length - 1].slug;
+  const mk = (ip, ua = "Mozilla/5.0") => ({ method: "GET", ip, get: (h) => (h === "user-agent" ? ua : undefined) });
+  popularity.record(mk("1.1.1.1", "Googlebot/2.1"), target); // bots ignored
+  for (let i = 0; i < 25; i++) popularity.record(mk(`10.0.0.${i}`), target);
+  popularity.record(mk("10.0.0.1"), target); // same visitor within 6 h: not counted again
+  assert.equal(popularity.counts().get(target) >= 25, true);
+  const after = popularity.ranked();
+  assert.equal(after.byViews, true);
+  assert.equal(after.products[0].slug, target);
+  assert.ok(before.products.length === after.products.length);
+});
