@@ -1,5 +1,5 @@
 // LB Aminos storefront script. No payment data is handled here: checkout posts the cart
-// (SKUs + quantities only) to /api/checkout and the server redirects to PeptidePay's hosted page.
+// (SKUs + quantities + chosen payment method) to /api/checkout, then shows the order page with payment instructions.
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -164,17 +164,18 @@
       if (!f.email) return (msg.textContent = "Enter your email.");
       if (!f.attest) return (msg.textContent = "Please confirm the research-use and 21+ statement.");
       const btn = $("button[type=submit]", form);
-      btn.disabled = true; msg.textContent = "Starting secure checkout…";
+      if (!f.pay_method) return (msg.textContent = "Choose how you'd like to pay.");
+      btn.disabled = true; msg.textContent = "Placing your order…";
       try {
         const r = await fetch("/api/checkout", {
           method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ items: items(), email: f.email, name: f.name, phone: f.phone, fulfillment: f.fulfillment, discount_code: f.discount_code, attest: true,
+          body: JSON.stringify({ items: items(), email: f.email, name: f.name, phone: f.phone, fulfillment: f.fulfillment, discount_code: f.discount_code, attest: true, pay_method: f.pay_method,
             address: { line1: f.line1, line2: f.line2, city: f.city, state: f.state, zip: f.zip } }),
         });
         const d = await r.json();
         if (!r.ok || !d.url) throw new Error(d.error || "Checkout failed.");
         store.set("lb_last_order", d.order_id);
-        location.href = d.url; // PeptidePay hosted checkout
+        location.href = d.url; // order page with payment instructions
       } catch (err) { msg.textContent = err.message; btn.disabled = false; }
     });
   }
@@ -243,10 +244,11 @@
       const f = fd();
       if (!f.email) return (msg.textContent = "Enter your email.");
       if (!f.box_terms || !f.attest) return (msg.textContent = "Please confirm both statements.");
-      submit.disabled = true; msg.textContent = "Starting secure checkout…";
+      if (!f.pay_method) return (msg.textContent = "Choose how you'd like to pay.");
+      submit.disabled = true; msg.textContent = "Placing your order…";
       try {
         const r = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ box, email: f.email, name: f.name, phone: f.phone, fulfillment: f.fulfillment, attest: true, box_terms: true, address: { line1: f.line1, city: f.city, state: f.state, zip: f.zip } }) });
+          body: JSON.stringify({ box, email: f.email, name: f.name, phone: f.phone, fulfillment: f.fulfillment, attest: true, box_terms: true, pay_method: f.pay_method, address: { line1: f.line1, city: f.city, state: f.state, zip: f.zip } }) });
         const d = await r.json();
         if (!r.ok || !d.url) throw new Error(d.error || "Checkout failed.");
         location.href = d.url;
@@ -254,29 +256,26 @@
     });
   }
 
-  // ---- order confirmation polling: every 3s; after 90s show the "still processing" note and keep polling ----
+  // ---- order page: the cart is done once an order exists. While awaiting payment, check every 20s
+  // and reload when ant marks it paid/cancelled or adds a card payment link. ----
   const ord = $("[data-order]");
-  if (ord && ord.dataset.status === "pending") {
-    const id = ord.dataset.order;
-    const started = Date.now();
-    const show = (s) => $$("[data-state]", ord).forEach((el) => (el.hidden = el.dataset.state !== s));
-    const poll = async () => {
-      try {
-        const r = await fetch(`/api/order/${id}`, { cache: "no-store" });
-        const d = await r.json();
-        if (d.status === "paid") {
-          show("paid");
-          store.set("lb_cart", {}); renderCount();
-          // Reload once to pick up the referral code rendered server-side.
-          if (!sessionStorage.getItem(`lb_paid_${id}`)) { sessionStorage.setItem(`lb_paid_${id}`, "1"); location.reload(); }
-          return;
-        }
-      } catch {}
-      if (Date.now() - started > 90_000) { $("[data-wait]", ord).hidden = true; $("[data-slow]", ord).hidden = false; }
-      setTimeout(poll, 3000);
-    };
-    poll();
-  } else if (ord) { store.set("lb_cart", {}); renderCount(); }
+  if (ord) {
+    store.set("lb_cart", {}); renderCount();
+    if (ord.dataset.status === "pending") {
+      const id = ord.dataset.order;
+      let link = null, first = true;
+      const poll = async () => {
+        try {
+          const r = await fetch(`/api/order/${id}`, { cache: "no-store" });
+          const d = await r.json();
+          if (d.status && d.status !== "pending") return location.reload();
+          if (first) { link = d.pay_link; first = false; } else if (d.pay_link !== link) return location.reload();
+        } catch {}
+        setTimeout(poll, 20000);
+      };
+      poll();
+    }
+  }
 
   // ---- email signup ----
   $$("[data-subscribe]").forEach((f) => f.addEventListener("submit", async (e) => {

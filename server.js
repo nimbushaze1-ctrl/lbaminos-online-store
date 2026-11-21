@@ -6,7 +6,6 @@ const catalog = require("./lib/catalog");
 const views = require("./lib/views");
 const orders = require("./lib/orders");
 const { db, now } = require("./lib/db");
-const { configStatus } = require("./lib/peptidepay");
 
 const app = express();
 app.disable("x-powered-by");
@@ -18,15 +17,14 @@ app.use((req, res, next) => {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Frame-Options": "DENY",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; form-action 'self' https://peptide-pay.com https://www.peptide-pay.com; frame-ancestors 'none'; base-uri 'self'",
+    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'",
   });
   if (req.secure) res.set("Strict-Transport-Security", "max-age=31536000");
   next();
 });
 
-// Payment routes first: the webhook needs the raw body, so no global JSON parser.
-const payments = require("./routes/payments");
-app.use(payments);
+// Checkout (manual payment: card via Stripe link, Zelle, Cash App, Venmo).
+app.use(require("./routes/checkout"));
 
 app.use(express.static(path.join(__dirname, "public"), { maxAge: "1h" }));
 
@@ -150,24 +148,36 @@ app.get("/admin", adminAuth, (req, res) => {
   const ms = db.prepare("SELECT * FROM messages ORDER BY id DESC LIMIT 100").all();
   const subs = db.prepare("SELECT COUNT(*) n FROM subscribers").get().n;
   const refs = db.prepare("SELECT u.code, r.owner_email, COUNT(*) n FROM referral_uses u JOIN referral_codes r ON r.code=u.code JOIN orders o ON o.id=u.order_id WHERE o.status IN ('paid','fulfilled') GROUP BY u.code").all();
-  const cs = configStatus();
+  const P = config.payments;
+  const handles = P.order.filter((k) => k !== "card").map((k) => `${P.methods[k].label} ${P.methods[k].handle ? e(P.methods[k].handle) : "<b>not set</b>"}`).join(" · ");
+  const pending = os.filter((o) => o.status === "pending").length;
+  const payCell = (o) => {
+    const meth = P.methods[o.pay_method]?.label || o.pay_method || "—";
+    if (o.status !== "pending") return `<span class="small">${e(meth)}</span>`;
+    const link = o.pay_method === "card"
+      ? `<form method="post" action="/admin/order/${e(o.id)}/link" class="inline"><input name="link" placeholder="Paste Stripe link" value="${e(o.pay_link || "")}" style="min-width:12rem"><button class="btn btn-ghost btn-sm">${o.pay_link ? "Update" : "Save"}</button></form>`
+      : "";
+    return `<b>${e(meth)}</b> <span class="mono small">${e(orders.payRef(o))}</span>${link}
+      <form method="post" action="/admin/order/${e(o.id)}/paid" class="inline"><button class="btn btn-primary btn-sm">Mark paid</button></form>
+      <form method="post" action="/admin/order/${e(o.id)}/cancel" class="inline"><button class="btn btn-ghost btn-sm">Cancel</button></form>`;
+  };
   const body = `<section class="block"><div class="wrap admin">
   <h1>Admin</h1>
-  <div class="note-box ${cs.mode === "not-configured" || !config.checkoutEnabled ? "warn" : ""}"><b>Payments:</b> mode ${e(cs.mode)} · wallet ${cs.walletSet ? "set" : cs.walletInvalid ? "INVALID" : "missing"} · sk_live key ${cs.apiKeySet ? "set" : cs.apiKeyIsTest ? "is sk_test (ignored)" : "not set"} · webhook secret ${cs.webhookSecretSet ? "set" : "missing"} · checkout ${config.checkoutEnabled ? "ENABLED" : "disabled"} · prices ${catalog.PRICES_CONFIRMED ? "confirmed" : "PLACEHOLDER"}</div>
-  <p>${subs} email subscribers.</p>
-  <form method="post" action="/admin/test-payment"><button class="btn btn-ghost btn-sm">Run a $1 live test payment</button> <span class="small muted">Real money: refund it to yourself afterwards.</span></form>
-  <h2>Orders</h2><div class="table-scroll"><table class="ledger"><thead><tr><th>Created</th><th>Order</th><th>Status</th><th>Email / phone</th><th>Items</th><th>Total</th><th>How</th><th>Tx</th><th></th></tr></thead><tbody>
+  <div class="note-box ${!config.checkoutEnabled || /not set/.test(handles) ? "warn" : ""}"><b>Payments:</b> manual · ordering ${config.checkoutEnabled ? "ENABLED" : "disabled"} · ${handles} · prices ${catalog.PRICES_CONFIRMED ? "confirmed" : "PLACEHOLDER"}</div>
+  <p>${subs} email subscribers · <b>${pending}</b> order(s) awaiting payment.</p>
+  <p class="small muted">Card orders: create a Stripe payment link for the exact total, paste it on the order and text/email the customer their order page. Zelle / Cash App / Venmo orders: match the memo code (LB-XXXXXX) and amount, then press Mark paid.</p>
+  <h2>Orders</h2><div class="table-scroll"><table class="ledger"><thead><tr><th>Created</th><th>Order</th><th>Status</th><th>Email / phone</th><th>Items</th><th>Total</th><th>How</th><th>Payment</th><th></th></tr></thead><tbody>
   ${os.map((o) => `<tr><td class="small">${e(o.created_at.slice(0, 16).replace("T", " "))}</td><td class="mono small"><a href="/order/${e(o.id)}">${e(o.id)}</a></td><td><b>${e(o.status)}</b></td><td class="small">${e(o.email)}<br>${e(o.phone || "")}</td>
   <td class="small">${JSON.parse(o.items).map((i) => `${e(i.name)} ×${i.qty}`).join("<br>")}</td><td class="mono">${m(o.total_cents)}${o.discount_code ? `<br><span class="small">${e(o.discount_code)}</span>` : ""}</td><td class="small">${e(o.fulfillment)}${o.address ? `<br>${e(Object.values(JSON.parse(o.address)).filter(Boolean).join(", "))}` : ""}</td>
-  <td class="mono small">${o.txid ? e(o.txid.slice(0, 12)) + "…" : ""}</td><td>${o.status === "paid" ? `<form method="post" action="/admin/fulfill/${e(o.id)}"><button class="btn btn-ghost btn-sm">Mark fulfilled</button></form>` : ""}</td></tr>`).join("") || `<tr><td colspan="9" class="muted">No orders yet.</td></tr>`}
+  <td class="small">${payCell(o)}</td><td>${o.status === "paid" ? `<form method="post" action="/admin/fulfill/${e(o.id)}"><button class="btn btn-ghost btn-sm">Mark fulfilled</button></form>` : ""}</td></tr>`).join("") || `<tr><td colspan="9" class="muted">No orders yet.</td></tr>`}
   </tbody></table></div>
-  <h2 id="boxes">Lab Boxes</h2><p class="small muted">Each month, press “Create invoice” and send the customer the payment link. Minimum ${catalog.BOX.months} months.</p>
+  <h2 id="boxes">Lab Boxes</h2><p class="small muted">Each month, press “Create invoice”, then send the customer their order page (and a Stripe link if they pay by card). Minimum ${catalog.BOX.months} months.</p>
   <div class="table-scroll"><table class="ledger"><thead><tr><th>Started</th><th>Box</th><th>Status</th><th>Customer</th><th>Compounds</th><th>Months paid</th><th>Next invoice</th><th></th></tr></thead><tbody>
   ${db.prepare("SELECT * FROM boxes ORDER BY created_at DESC LIMIT 200").all().map((b) => {
-    const open = db.prepare("SELECT id, session_url, total_cents FROM orders WHERE box_id = ? AND status = 'pending' ORDER BY created_at DESC").get(b.id);
+    const open = db.prepare("SELECT id, total_cents FROM orders WHERE box_id = ? AND status = 'pending' ORDER BY created_at DESC").get(b.id);
     const names = JSON.parse(b.skus).map((k) => { const x = catalog.bySku.get(k); return x ? `${x.product.name} ${x.variant.size}` : k; });
     return `<tr><td class="small">${e(b.created_at.slice(0, 10))}</td><td class="mono small">${e(b.id)}</td><td><b>${e(b.status)}</b></td><td class="small">${e(b.email)}<br>${e(b.phone || "")}</td><td class="small">${names.map(e).join("<br>")}</td><td class="mono">${b.months_paid}</td>
-    <td class="small">${open ? `${m(open.total_cents)} <a href="${e(open.session_url || "")}">payment link</a><br><span class="mono">${e(open.id)}</span>` : "—"}</td>
+    <td class="small">${open ? `${m(open.total_cents)} <a href="${e(config.siteUrl)}/order/${e(open.id)}">order page</a><br><span class="mono">${e(open.id)}</span>` : "—"}</td>
     <td>${b.status === "active" && !open ? `<form method="post" action="/admin/box/${e(b.id)}/invoice"><button class="btn btn-ghost btn-sm">Create invoice</button></form>` : ""}${b.status !== "cancelled" && b.months_paid >= catalog.BOX.months ? `<form method="post" action="/admin/box/${e(b.id)}/cancel"><button class="btn btn-ghost btn-sm">Cancel</button></form>` : ""}</td></tr>`;
   }).join("") || `<tr><td colspan="8" class="muted">No Lab Boxes yet.</td></tr>`}
   </tbody></table></div>
@@ -179,13 +189,9 @@ app.get("/admin", adminAuth, (req, res) => {
   res.set("Cache-Control", "no-store");
   html(res, views.layout({ title: "Admin", path: "/admin", body }));
 });
-app.post("/admin/box/:id/invoice", adminAuth, async (req, res) => {
+app.post("/admin/box/:id/invoice", adminAuth, (req, res) => {
   try {
-    const o = orders.createBoxRenewal(req.params.id);
-    if (!o.session_url) {
-      const b = orders.getBox(req.params.id);
-      await payments.startSession(o, `LB Aminos Lab Box, month ${b.months_paid + 1}`, "/lab-box");
-    }
+    orders.createBoxRenewal(req.params.id);
     res.redirect(303, "/admin#boxes");
   } catch (e) {
     res.status(400).send(e.userFacing ? e.message : `Couldn't create the invoice: ${e.message}`);
@@ -195,16 +201,21 @@ app.post("/admin/box/:id/cancel", adminAuth, (req, res) => {
   db.prepare("UPDATE boxes SET status='cancelled' WHERE id=?").run(req.params.id);
   res.redirect(303, "/admin#boxes");
 });
-// $1 live test payment (PeptidePay has no sandbox): creates a real $1.00 order and opens checkout.
-app.post("/admin/test-payment", adminAuth, async (req, res) => {
-  try {
-    const priced = { items: [{ sku: "TEST-1", slug: null, name: "Test payment", qty: 1, listUnitCents: 100, unitCents: 100, totalCents: 100, tierPct: 0 }], subtotal: 100, discount: 0, discountCode: null, shipping: 0, total: 100 };
-    const o = orders.createOrder({ email: config.brand.email, fulfillment: "pickup", priced, notes: "Admin $1 test payment" });
-    const s = await payments.startSession(o, "LB Aminos test payment", "/admin");
-    res.redirect(303, s.url);
-  } catch (e) {
-    res.status(502).send(`PeptidePay test failed: ${e.message}`);
-  }
+const form = express.urlencoded({ extended: false, limit: "8kb" });
+app.post("/admin/order/:id/link", adminAuth, form, (req, res) => {
+  try { orders.setPayLink(req.params.id, req.body.link); res.redirect(303, "/admin"); }
+  catch (e) { res.status(400).send(e.userFacing ? e.message : "Couldn't save the link."); }
+});
+app.post("/admin/order/:id/paid", adminAuth, (req, res) => {
+  const o = orders.getOrder(req.params.id);
+  if (!o) return res.status(404).send("Order not found");
+  const r = orders.markPaid({ orderId: o.id, txid: `manual:${o.pay_method || "other"}` });
+  if (r.mismatch) return res.status(400).send(`Couldn't mark paid (${r.mismatch}).`);
+  res.redirect(303, "/admin");
+});
+app.post("/admin/order/:id/cancel", adminAuth, (req, res) => {
+  orders.cancelOrder(req.params.id);
+  res.redirect(303, "/admin");
 });
 app.post("/admin/fulfill/:id", adminAuth, (req, res) => {
   db.prepare("UPDATE orders SET status='fulfilled' WHERE id=? AND status='paid'").run(req.params.id);
@@ -222,11 +233,9 @@ orders.startWorker();
 if (require.main === module) {
   const port = Number(process.env.PORT || 3000);
   app.listen(port, () => {
-    const cs = configStatus();
+    const P = config.payments.methods;
     console.log(`LB Aminos store on :${port} · ${config.siteUrl}`);
-    console.log(`[peptidepay] mode=${cs.mode} wallet=${cs.walletSet} live_key=${cs.apiKeySet} webhook_secret=${cs.webhookSecretSet} checkout_enabled=${config.checkoutEnabled}`);
-    if (cs.apiKeyIsTest) console.warn("[peptidepay] PEPTIDEPAY_API_KEY is an sk_test_ key; it is ignored. Use sk_live_.");
-    if (cs.walletInvalid) console.warn("[peptidepay] PEPTIDEPAY_WALLET is not a valid 0x address.");
+    console.log(`[payments] manual · ordering=${config.checkoutEnabled} zelle=${P.zelle.handle || "unset"} cashapp=${P.cashapp.handle || "unset"} venmo=${P.venmo.handle || "unset"}`);
     if (!catalog.PRICES_CONFIRMED) console.warn("[catalog] Prices are PLACEHOLDERS.");
   });
 }
