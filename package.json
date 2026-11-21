@@ -1,7 +1,7 @@
 {
   "name": "lb-aminos-store",
   "version": "1.0.0",
-  "description": "LB Aminos online store with PeptidePay checkout",
+  "description": "LB Aminos online store (manual payments: Stripe link, Zelle, Cash App, Venmo)",
   "main": "server.js",
   "directories": {
     "lib": "lib"
