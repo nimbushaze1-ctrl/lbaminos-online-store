@@ -23,6 +23,7 @@ Node 22 + Express, SQLite (built into Node), server-rendered pages. One dependen
   the order's "Paste Stripe link" box in /admin, and text the customer their order page. When Stripe shows it paid, press **Mark paid**.
 - **Zelle / Cash App / Venmo:** the order page shows your handle, the amount and the memo code. When the money
   arrives with that code, press **Mark paid**. Mark paid issues the referral code and activates Lab Boxes.
+- **Phone alerts:** set `NTFY_TOPIC` and subscribe to that topic in the free ntfy app; every new order sends a push with the items, total, payment method, memo code and contact details.
 - **Cancel** releases an unpaid order. New orders also appear in the logs as `[orders] NEW ...`.
 
 ## Deploy to Railway

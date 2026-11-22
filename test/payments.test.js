@@ -6,6 +6,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
+// Local stand-in for ntfy.sh so the phone-alert test sends nothing real.
+const http = require("node:http");
+const pushes = [];
+const ntfy = http.createServer((req, res) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => { pushes.push({ url: req.url, body: JSON.parse(b) }); res.end("{}"); }); });
+
 let base, app, server;
 test.before(async () => {
   process.env.CHECKOUT_ENABLED = "true";
@@ -16,11 +21,14 @@ test.before(async () => {
   process.env.CASHAPP_HANDLE = "lbaminos";
   process.env.VENMO_HANDLE = "@lb-aminos";
   process.env.ADMIN_PASSWORD = "test-admin-pw";
+  await new Promise((r) => ntfy.listen(0, "127.0.0.1", r));
+  process.env.NTFY_SERVER = `http://127.0.0.1:${ntfy.address().port}`;
+  process.env.NTFY_TOPIC = "lb-test-topic";
   app = require("../server.js");
   await new Promise((r) => (server = app.listen(0, r)));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-test.after(() => server.close());
+test.after(() => { server.close(); ntfy.close(); });
 
 const post = (p, body, headers = {}) =>
   fetch(base + p, { method: "POST", headers: { "content-type": "application/json", accept: "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
@@ -46,6 +54,19 @@ test("checkout prices server-side, ignores client totals, and records the paymen
   assert.equal(o.pay_method, "zelle");
   assert.equal(o.email, "buyer@example.com");
   order = o;
+});
+
+test("new order sends a phone alert with the details", async () => {
+  require("../lib/orders").startWorker()();
+  for (let i = 0; i < 50 && !pushes.some((p) => p.body.message.includes(require("../lib/orders").payRef(order))); i++) await new Promise((r) => setTimeout(r, 20));
+  const p = pushes.find((x) => x.body.message.includes(require("../lib/orders").payRef(order)));
+  assert.ok(p, "alert sent");
+  assert.equal(p.body.topic, "lb-test-topic");
+  assert.equal(p.body.title, "New order! $189.97 · Zelle");
+  assert.match(p.body.message, /SS-31[^\n]*× 3/);
+  assert.match(p.body.message, /buyer@example\.com/);
+  assert.match(p.body.message, /Local pickup/);
+  assert.equal(p.body.click, "https://shop.example.com/admin");
 });
 
 test("checkout requires a valid payment method", async () => {
