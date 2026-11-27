@@ -56,6 +56,9 @@ function lba_settings_page() {
 	?>
 	<div class="wrap">
 		<h1>LB Aminos</h1>
+		<?php if ( isset( $_GET['lba_error'] ) ) : ?>
+			<div class="notice notice-error"><p><strong>Couldn't install WooCommerce automatically.</strong> <?php echo esc_html( sanitize_text_field( wp_unslash( $_GET['lba_error'] ) ) ); ?> You can install it by hand: <a href="<?php echo esc_url( admin_url( 'plugin-install.php?s=woocommerce&tab=search&type=term' ) ); ?>">Plugins &rarr; Add New</a>, search WooCommerce, Install, Activate, then come back here.</p></div>
+		<?php endif; ?>
 		<?php if ( isset( $_GET['lba_setup'] ) ) : ?>
 			<div class="notice notice-success"><p><strong>Store set up.</strong> <?php echo esc_html( sanitize_text_field( wp_unslash( $_GET['lba_setup'] ) ) ); ?></p></div>
 		<?php endif; ?>
@@ -63,7 +66,12 @@ function lba_settings_page() {
 		<div style="background:#fff;border:1px solid #dcdcde;padding:16px 20px;margin:16px 0;max-width:820px">
 			<h2 style="margin-top:0">1. Set up the store</h2>
 			<?php if ( ! $woo ) : ?>
-				<p><strong>WooCommerce isn't active yet.</strong> Go to <a href="<?php echo esc_url( admin_url( 'plugin-install.php?s=woocommerce&tab=search&type=term' ) ); ?>">Plugins &rarr; Add New</a>, install <strong>WooCommerce</strong>, activate it, then come back here.</p>
+				<p>One click installs <strong>WooCommerce</strong> (the free shopping-cart plugin) and then sets up everything below. It takes about a minute.</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="lba_install_woo">
+					<?php wp_nonce_field( 'lba_install_woo' ); ?>
+					<?php submit_button( 'Install WooCommerce and set up my store', 'primary', 'submit', false ); ?>
+				</form>
 			<?php else : ?>
 				<p>This adds all compounds with photos, prices and research details, creates the shop, policy and info pages, sets up pickup, delivery and shipping, and turns on Zelle / Venmo / Cash App and card-link payments. Running it again updates products instead of duplicating them.</p>
 				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">

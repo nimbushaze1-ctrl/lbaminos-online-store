@@ -5,15 +5,16 @@ Two pieces, both uploaded from the WordPress dashboard:
 - **lb-aminos-theme.zip**: the look (brand colors, fonts, homepage, product pages, 21+ entry screen, footer disclaimers).
 - **lb-aminos-store-plugin.zip**: the shop setup. One button adds all 15 compounds with photos, prices and research details, the info and policy pages, pickup / delivery / shipping, bulk pricing and BOGO, Zelle / Venmo / Cash App and card-link payments, and the required "21+ and research only" checkbox at checkout.
 
-You also need the free **WooCommerce** plugin (the shopping cart). It installs from inside WordPress.
+The plugin also installs **WooCommerce** (WordPress's free shopping cart) for you, so there's nothing extra to download.
 
-## Install (about 10 minutes)
+## Install (about 5 minutes)
 
 1. Log in to your WordPress dashboard (yoursite.com/wp-admin).
-2. **Plugins → Add New** → search **WooCommerce** → Install → Activate. Skip its setup wizard if it opens.
-3. **Plugins → Add New → Upload Plugin** → choose `lb-aminos-store-plugin.zip` → Install → Activate.
-4. **Appearance → Themes → Add New → Upload Theme** → choose `lb-aminos-theme.zip` → Install → Activate.
-5. Click **LB Aminos** in the left menu → **Set up my store**. Done.
+2. **Plugins → Add New → Upload Plugin** → choose `lb-aminos-store-plugin.zip` → Install → Activate.
+3. **Appearance → Themes → Add New → Upload Theme** → choose `lb-aminos-theme.zip` → Install → Activate.
+4. Click **LB Aminos** in the left menu → **Install WooCommerce and set up my store**. Wait about a minute. Done.
+
+If your host blocks the automatic install, the page tells you. Then do it by hand: Plugins → Add New → search **WooCommerce** → Install → Activate, come back to LB Aminos and click **Set up my store**.
 
 ## Everyday tasks
 

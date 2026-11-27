@@ -14,6 +14,65 @@ add_action( 'admin_post_lba_setup', function () {
 	exit;
 } );
 
+/**
+ * Installs and activates WooCommerce from WordPress.org, then hands off to setup
+ * in a fresh request so WooCommerce is fully loaded.
+ */
+add_action( 'admin_post_lba_install_woo', function () {
+	if ( ! current_user_can( 'install_plugins' ) || ! current_user_can( 'activate_plugins' ) ) {
+		wp_die( 'Not allowed.' );
+	}
+	check_admin_referer( 'lba_install_woo' );
+	$err = lba_install_woocommerce();
+	if ( $err ) {
+		wp_safe_redirect( add_query_arg( 'lba_error', rawurlencode( $err ), admin_url( 'admin.php?page=lb-aminos' ) ) );
+		exit;
+	}
+	$next = wp_nonce_url( admin_url( 'admin-post.php?action=lba_setup' ), 'lba_setup' );
+	wp_safe_redirect( $next );
+	exit;
+} );
+
+/** Returns an error message, or '' on success. */
+function lba_install_woocommerce() {
+	$file = 'woocommerce/woocommerce.php';
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	if ( ! file_exists( WP_PLUGIN_DIR . '/' . $file ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/misc.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+		$api = plugins_api( 'plugin_information', array( 'slug' => 'woocommerce', 'fields' => array( 'sections' => false ) ) );
+		if ( is_wp_error( $api ) ) {
+			return 'WordPress.org could not be reached from your host.';
+		}
+		$skin     = new WP_Ajax_Upgrader_Skin();
+		$upgrader = new Plugin_Upgrader( $skin );
+		$result   = $upgrader->install( $api->download_link );
+		if ( is_wp_error( $result ) ) {
+			return $result->get_error_message();
+		}
+		if ( is_wp_error( $skin->result ) ) {
+			return $skin->result->get_error_message();
+		}
+		if ( ! $result ) {
+			$errors = $skin->get_errors();
+			return $errors->has_errors() ? $errors->get_error_message() : 'Your host did not allow the download (it may need FTP details).';
+		}
+		wp_clean_plugins_cache();
+	}
+	if ( ! is_plugin_active( $file ) ) {
+		$act = activate_plugin( $file );
+		if ( is_wp_error( $act ) ) {
+			return $act->get_error_message();
+		}
+	}
+	// Skip WooCommerce's own welcome wizard; our setup covers it.
+	delete_transient( '_wc_activation_redirect' );
+	update_option( 'woocommerce_onboarding_profile', array( 'skipped' => true ) );
+	return '';
+}
+
 /** Runs every setup step and returns a one-line summary. */
 function lba_run_setup() {
 	@set_time_limit( 300 ); // phpcs:ignore

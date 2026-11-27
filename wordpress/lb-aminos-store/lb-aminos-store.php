@@ -57,7 +57,7 @@ add_action( 'admin_notices', function () {
 	$url = admin_url( 'admin.php?page=lb-aminos' );
 	echo '<div class="notice notice-info"><p><strong>LB Aminos Store is installed.</strong> ';
 	if ( ! class_exists( 'WooCommerce' ) ) {
-		echo 'Install and activate the free <strong>WooCommerce</strong> plugin first (Plugins &rarr; Add New &rarr; search "WooCommerce"), then ';
+		echo 'WooCommerce will be installed for you. ';
 	}
 	echo '<a href="' . esc_url( $url ) . '">open LB Aminos settings and click "Set up my store"</a>.</p></div>';
 } );
