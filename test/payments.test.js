@@ -90,7 +90,7 @@ test("order page shows per-method instructions with the memo code", async () => 
   assert.match(h, new RegExp(payRef(order)));
   assert.match(h, /\$150\.00/);
   const mk = async (pay_method) => (await (await post("/api/checkout", { items: [{ sku: "KPV-10", quantity: 1 }], email: "m@b.co", attest: true, pay_method })).json()).order_id;
-  assert.match(await page(`/order/${await mk("cashapp")}`), /\$lbaminos[\s\S]*cash\.app\/%24lbaminos\/64\.99/);
+  assert.match(await page(`/order/${await mk("cashapp")}`), /\$lbaminos[\s\S]*cash\.app\/%24lbaminos\/50\.00/);
   assert.match(await page(`/order/${await mk("venmo")}`), /@lb-aminos[\s\S]*venmo\.com\/u\/lb-aminos/);
   assert.match(await page(`/order/${await mk("card")}`), /secure Stripe payment link/);
 });
