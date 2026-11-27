@@ -46,8 +46,8 @@ test("checkout prices server-side, ignores client totals, and records the paymen
   assert.equal(r.status, 200, JSON.stringify(d));
   assert.equal(d.url, `/order/${d.order_id}`);
   const st = await (await fetch(`${base}/api/order/${d.order_id}`)).json();
-  // SS-31 $49.99 x3 with BOGO 50% (beats 5% bulk) = 4999+4999+2500; KPV $64.99; pickup free
-  assert.equal(st.amount, 4999 * 2 + 2500 + 6499);
+  // SS-31 $40 x3 with BOGO 50% (beats 5% bulk); KPV $50; pickup free
+  assert.equal(st.amount, 4000 * 2 + 2000 + 5000);
   assert.equal(st.status, "pending");
   assert.equal(st.pay_link, null);
   const o = require("../lib/orders").getOrder(d.order_id);
@@ -62,7 +62,7 @@ test("new order sends a phone alert with the details", async () => {
   const p = pushes.find((x) => x.body.message.includes(require("../lib/orders").payRef(order)));
   assert.ok(p, "alert sent");
   assert.equal(p.body.topic, "lb-test-topic");
-  assert.equal(p.body.title, "New order! $189.97 · Zelle");
+  assert.equal(p.body.title, "New order! $150.00 · Zelle");
   assert.match(p.body.message, /SS-31[^\n]*× 3/);
   assert.match(p.body.message, /buyer@example\.com/);
   assert.match(p.body.message, /Local pickup/);
@@ -88,7 +88,7 @@ test("order page shows per-method instructions with the memo code", async () => 
   assert.match(h, /pay@example\.com/);
   assert.match(h, /Name shown: LB Aminos/);
   assert.match(h, new RegExp(payRef(order)));
-  assert.match(h, /\$189\.97/);
+  assert.match(h, /\$150\.00/);
   const mk = async (pay_method) => (await (await post("/api/checkout", { items: [{ sku: "KPV-10", quantity: 1 }], email: "m@b.co", attest: true, pay_method })).json()).order_id;
   assert.match(await page(`/order/${await mk("cashapp")}`), /\$lbaminos[\s\S]*cash\.app\/%24lbaminos\/64\.99/);
   assert.match(await page(`/order/${await mk("venmo")}`), /@lb-aminos[\s\S]*venmo\.com\/u\/lb-aminos/);
@@ -137,7 +137,7 @@ test("Lab Box: 4 picks at 20% off, free delivery, renewal after payment", async 
   const r = await post("/api/checkout", { ...ship, box, total: 1 });
   const d = await r.json();
   assert.equal(r.status, 200, JSON.stringify(d));
-  const expected = Math.round(7999 * 0.8) + Math.round(8999 * 0.8) + 2 * Math.round(4999 * 0.8);
+  const expected = (6000 + 7000 + 2 * 4000) * 0.8;
   assert.equal((await (await fetch(`${base}/api/order/${d.order_id}`)).json()).amount, expected, "20% off list, shipping free");
   const orders = require("../lib/orders");
   const { db } = require("../lib/db");
@@ -154,9 +154,9 @@ test("Lab Box: 4 picks at 20% off, free delivery, renewal after payment", async 
 test("BOGO 50%: second unit half off, picks the cheaper of BOGO vs bulk", () => {
   const { linePrice, bySku } = require("../lib/catalog");
   const kpv = bySku.get("KPV-10").variant;
-  assert.equal(linePrice(kpv, 1).totalCents, 6499);
-  assert.equal(linePrice(kpv, 2).totalCents, 6499 + 3250);
-  assert.equal(linePrice(kpv, 3).totalCents, 6499 * 2 + 3250);
+  assert.equal(linePrice(kpv, 1).totalCents, 5000);
+  assert.equal(linePrice(kpv, 2).totalCents, 5000 + 2500);
+  assert.equal(linePrice(kpv, 3).totalCents, 5000 * 2 + 2500);
   assert.equal(linePrice(kpv, 2).label, "BOGO 50%");
 });
 
